@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Gelişmiş Mobil Picker - Odometer Style (PWA)</title>
+    
+    <!-- PWA & Mobil Meta Etiketleri -->
+    <meta name="theme-color" content="#121214">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link id="pwaManifest" rel="manifest" href="">
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background-color: #ffffff;
+            color: #000000;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            width: 100vw;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .status-bar {
+            position: absolute;
+            top: 20px;
+            z-index: 50;
+            background: transparent;
+            border: none;
+            padding: 0;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            color: #71717a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background-color: #52525b;
+            transition: background-color 0.4s ease, box-shadow 0.4s ease;
+            animation: dotIdle 2s infinite ease-in-out;
+        }
+
+        @keyframes dotIdle {
+            0% { transform: scale(0.85); opacity: 0.4; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+            100% { transform: scale(0.85); opacity: 0.4; }
+        }
+
+        .status-bar.status-searching .status-dot { background-color: #1e3a8a; }
+        .status-bar.status-playing .status-dot { background-color: #22c55e; }
+        .status-bar.status-paused .status-dot { background-color: #f59e0b; }
+
+        header {
+            position: absolute;
+            top: 60px;
+            z-index: 30;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+            width: 100%;
+        }
+        .artist-avatar-wrapper {
+            position: relative;
+            margin-bottom: 12px;
+        }
+        .artist-avatar-container {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            overflow: hidden;
+            background: #121214;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease;
+            opacity: 1;
+            transform: scale(1);
+        }
+        .artist-avatar-container.fade-out {
+            opacity: 0;
+            transform: scale(0.85);
+        }
+        .artist-avatar-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .artist-avatar-placeholder {
+            font-size: 30px;
+            color: #71717a;
+        }
+        header span.subtitle {
+            font-size: 12px;
+            letter-spacing: -0.01em;
+            color: #71717a;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+        header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: #000000;
+            margin-bottom: 2px;
+        }
+
+        .odometer-wrapper {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 340px;
+            height: 120px;
+            background-color: #121214;
+            border-radius: 24px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            z-index: 10;
+            cursor: grab;
+            will-change: transform;
+            transform: translate(-50%, -50%) translateZ(0);
+        }
+
+        .odometer-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .wheel-action-btn {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #ffffff;
+            border: none;
+            color: #000000;
+            height: 34px;
+            padding: 0 12px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 50;
+            pointer-events: auto !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            transition: transform 0.2s ease, background-color 0.2s ease, opacity 0.2s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .wheel-action-btn:hover { transform: translateY(-50%) scale(1.05); }
+        .wheel-action-btn:active { transform: translateY(-50%) scale(0.95); }
+
+        .fade-top, .fade-bottom {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 45px;
+            pointer-events: none;
+            z-index: 25;
+        }
+        .fade-top {
+            top: 0;
+            background: linear-gradient(to bottom, #121214 10%, rgba(18,18,20,0.8) 50%, transparent);
+        }
+        .fade-bottom {
+            bottom: 0;
+            background: linear-gradient(to top, #121214 10%, rgba(18,18,20,0.8) 50%, transparent);
+        }
+
+        .picker-wheel-item {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            /* Yazıların sağdaki butonun altında kalmaması için sol hizalama ve sağ padding */
+            justify-content: flex-start;
+            padding-left: 28px;
+            padding-right: 85px; 
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            will-change: transform, opacity;
+            height: 45px;
+            width: 100%;
+            pointer-events: none;
+        }
+        .picker-wheel-item span {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+        }
+
+        .player-controls-container {
+            position: absolute;
+            bottom: 48px;
+            z-index: 30;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 85%;
+            max-width: 340px;
+            animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .player-column {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 52px;
+            background: #f1f1f3;
+            border-radius: 18px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            padding: 0 6px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);
+            border: 1px solid rgba(0, 0, 0, 0.03);
+            touch-action: none;
+        }
+
+        .time-counter {
+            font-size: 11px;
+            letter-spacing: 0.04em;
+            font-weight: 600;
+            color: #71717a;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            align-self: flex-end;
+            margin-top: 6px;
+            margin-right: 4px;
+        }
+
+        .waveform-area {
+            flex: 1;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 8px;
+            position: relative;
+            gap: 2px;
+            cursor: pointer;
+            touch-action: none;
+        }
+
+        .waveform-bar {
+            flex: 1;
+            max-width: 3px;
+            background: rgba(0, 0, 0, 0.12);
+            border-radius: 9999px;
+            transform-origin: center;
+            transition: background 0.1s ease, height 0.1s ease;
+            pointer-events: none;
+        }
+        .waveform-bar.active { background: #000000; }
+        .waveform-bar.playing { animation: waveformPulseBar 0.6s infinite ease-in-out alternate; }
+
+        .waveform-bar:nth-child(4n) { animation-delay: 0.1s; }
+        .waveform-bar:nth-child(4n+1) { animation-delay: 0.3s; }
+        .waveform-bar:nth-child(4n+2) { animation-delay: 0.2s; }
+        .waveform-bar:nth-child(4n+3) { animation-delay: 0.4s; }
+
+        @keyframes waveformPulseBar {
+            0% { transform: scaleY(0.2); }
+            100% { transform: scaleY(1.4); }
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 40;
+            background: #f4f4f5;
+            border: none;
+            color: #000000;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .back-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: #000000;
+        }
+
+        ::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="statusBar" class="status-bar">
+        <div class="status-dot"></div>
+        <span id="statusText">Hazır</span>
+    </div>
+
+    <button id="backBtn" class="back-btn" title="Geri">
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+    </button>
+
+    <header>
+        <div class="artist-avatar-wrapper">
+            <div id="artistAvatarContainer" class="artist-avatar-container">
+                <span id="avatarPlaceholder" class="artist-avatar-placeholder">🎵</span>
+                <img id="artistAvatarImg" src="" alt="" style="display: none;">
+            </div>
+        </div>
+        <span id="headerSubtitle" class="subtitle">Seçilen Sanatçı</span>
+        <h1 id="selectedTitle">Yükleniyor...</h1>
+    </header>
+
+    <div id="wheelContainer" class="odometer-wrapper">
+        <button id="actionBtn" class="wheel-action-btn">Seç</button>
+        <div class="fade-top"></div>
+        <div class="fade-bottom"></div>
+        <div id="pickerList" class="odometer-inner"></div>
+    </div>
+
+    <div id="playerControlsContainer" class="player-controls-container">
+        <div class="player-column">
+            <div id="progressBarContainer" class="progress-bar-container">
+                <div id="waveformArea" class="waveform-area"></div>
+            </div>
+            <span id="timeCounter" class="time-counter">0:00 / 0:00</span>
+        </div>
+    </div>
+
+    <script>
+        const manifestData = {
+            "name": "Odometer Music Picker",
+            "short_name": "MusicPicker",
+            "start_url": "./",
+            "display": "standalone",
+            "background_color": "#ffffff",
+            "theme_color": "#121214",
+            "orientation": "portrait",
+            "icons": [
+                { "src": "https://imglink.cc/cdn/94Z4EzdzuP.jpeg", "sizes": "192x192", "type": "image/jpeg" },
+                { "src": "https://imglink.cc/cdn/94Z4EzdzuP.jpeg", "sizes": "512x512", "type": "image/jpeg" }
+            ]
+        };
+        const manifestBlob = new Blob([JSON.stringify(manifestData)], {type: 'application/json'});
+        document.getElementById('pwaManifest').href = URL.createObjectURL(manifestBlob);
+
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                const CACHE_NAME = 'odometer-picker-v6';
+                self.addEventListener('install', (e) => {
+                    e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(['./'])));
+                    self.skipWaiting();
+                });
+                self.addEventListener('activate', (e) => {
+                    e.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => k !== CACHE_NAME && caches.delete(k)))));
+                    self.clients.claim();
+                });
+                self.addEventListener('fetch', (e) => {
+                    e.respondWith(caches.match(e.request).then(res => res || fetch(e.request).catch(() => {})));
+                });
+            `;
+            const swBlob = new Blob([swCode], {type: 'text/javascript'});
+            navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
+        }
+
+        const artistData = {
+            "No.1": ["Koyu", "Tekel Sessizliği", "Full Kontak", "Bana Titre", "Sıkıntı Var"],
+            "Stabil": ["Lavanta"],
+            "Ceza": ["Holocaust", "Neyim Var Ki", "Yerli Plaka", "Feyz Al", "Panorama"],
+            "Sagopa": ["Galiba", "Vasiyet", "Baytar", "Bu Şehri Arkamda Bırakıyorum", "Kendim Nedense"],
+            "Blok3": ["Affetmem", "Patlattılar", "Gözlerinde Gözlerim", "Vur", "Olay"],
+            "Şehinşah": ["Kana Kana", "İblis", "Düstur", "Pusula", "Yarım Kalır"],
+            "Kezzo": ["Hikayeme Devam", "Geceler", "Kafam Hariç", "Dipsiz Kuyu", "Sokaklar"],
+            "Allame": ["Fare Kapanı", "Manzara", "Kötü", "Bir Dakika", "Saldır"],
+            "Joker": ["Yaşamak Öldürür", "Rhyme Terapisti", "Gözlerim", "Karakter", "Kafası Mükemmel"]
+        };
+
+        const artistImages = {
+            "No.1": "https://imglink.cc/cdn/94Z4EzdzuP.jpeg",
+            "Stabil": "https://imglink.cc/cdn/GVUbHybITO.jpeg"
+        };
+
+        const songAudioMap = {
+            "No.1_Koyu": "https://mp3tourl.com/audio/1790626084973-2451ea90-b9f7-4f0e-8a4c-aa5a036b25aa.mp3",
+            "No.1_Tekel Sessizliği": "https://mp3tourl.com/audio/1790801306851-3faa8b04-e920-4094-a819-8c5debd25c47.mp3"
+        };
+
+        let currentAudioElement = null;
+        let currentPlayingKey = "";
+        let preloadedAudioCache = {};
+        let wakeLock = null;
+        let isUserScrolling = false;
+        let scrollTimeout = null;
+
+        function setStatus(text, mode = 'idle') {
+            const statusBar = document.getElementById('statusBar');
+            const statusText = document.getElementById('statusText');
+            if (statusText.textContent === text) return;
+            statusText.textContent = text;
+            statusBar.classList.remove('status-searching', 'status-playing', 'status-paused');
+            if (mode === 'searching') statusBar.classList.add('status-searching');
+            else if (mode === 'playing') statusBar.classList.add('status-playing');
+            else if (mode === 'paused') statusBar.classList.add('status-paused');
+        }
+
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+            }
+        }
+
+        function releaseWakeLock() {
+            if (wakeLock) { wakeLock.release().then(() => { wakeLock = null; }); }
+        }
+
+        function triggerHaptic(type = 'tick') {
+            if (!('vibrate' in navigator)) return;
+            switch (type) {
+                case 'tick': navigator.vibrate(8); break;
+                case 'selection': navigator.vibrate(15); break;
+                case 'click': navigator.vibrate(25); break;
+                case 'play': navigator.vibrate([20, 40, 20]); break;
+                case 'back': navigator.vibrate(30); break;
+                default: navigator.vibrate(10);
+            }
+        }
+
+        let currentMode = 'artists';
+        let currentData = Object.keys(artistData);
+        let selectedArtistName = "";
+        let selectedArtistIndex = 0;
+        let isPlaying = false;
+
+        let scrollOffset = 0;
+        let targetOffset = 0;
+        let isDragging = false;
+        let lastY = 0;
+        let velocity = 0;
+        let lastActiveIndex = -1;
+
+        const totalWaveformBars = 32;
+
+        function initWaveform() {
+            const container = document.getElementById('waveformArea');
+            container.innerHTML = '';
+            const baseHeights = [10, 16, 22, 12, 28, 18, 32, 14, 24, 30, 16, 20, 26, 12, 22, 18];
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < totalWaveformBars; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'waveform-bar';
+                bar.style.height = `${baseHeights[i % baseHeights.length]}px`;
+                fragment.appendChild(bar);
+            }
+            container.appendChild(fragment);
+        }
+
+        function setWaveformPlaying(playing) {
+            const bars = document.getElementById('waveformArea').children;
+            for (let i = 0; i < bars.length; i++) {
+                if (playing) bars[i].classList.add('playing');
+                else bars[i].classList.remove('playing');
+            }
+        }
+
+        function updateWaveformProgress(percentage) {
+            const bars = document.getElementById('waveformArea').children;
+            const activeCount = Math.round((percentage / 100) * bars.length);
+            for (let i = 0; i < bars.length; i++) {
+                if (i < activeCount) bars[i].classList.add('active');
+                else bars[i].classList.remove('active');
+            }
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "0:00";
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+
+        function seekSong(clientX) {
+            if (!currentAudioElement || isNaN(currentAudioElement.duration)) return;
+            const container = document.getElementById('waveformArea');
+            const rect = container.getBoundingClientRect();
+            const percentage = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            currentAudioElement.currentTime = percentage * currentAudioElement.duration;
+            updateWaveformProgress(percentage * 100);
+        }
+
+        function updateActionButtonText() {
+            if (currentMode === 'artists') {
+                actionBtn.textContent = "Seç";
+            } else {
+                actionBtn.textContent = isPlaying ? "Durdur" : "Oynat";
+            }
+        }
+
+        function preloadSong(songKey, audioUrl) {
+            if (!audioUrl || preloadedAudioCache[songKey]) return;
+            const audio = new Audio();
+            audio.src = audioUrl;
+            audio.preload = "auto";
+            audio.load();
+            preloadedAudioCache[songKey] = audio;
+        }
+
+        function playSongAtIndex(index) {
+            if (index < 0 || index >= currentData.length) return;
+            
+            targetOffset = index;
+            const songName = currentData[index];
+            const songKey = `${selectedArtistName}_${songName}`;
+            const timeCounter = document.getElementById('timeCounter');
+            const audioUrl = songAudioMap[songKey];
+
+            if (!audioUrl) {
+                currentPlayingKey = "";
+                isPlaying = false;
+                setWaveformPlaying(false);
+                updateWaveformProgress(0);
+                timeCounter.textContent = "0:00 / 0:00";
+                updateActionButtonText();
+                setStatus("Ses dosyası yok", 'paused');
+                return;
+            }
+
+            if (currentAudioElement && currentPlayingKey === songKey) {
+                currentAudioElement.play().then(() => {
+                    isPlaying = true;
+                    setWaveformPlaying(true);
+                    updateActionButtonText();
+                    setStatus("Çalınıyor", 'playing');
+                    requestWakeLock();
+                    triggerHaptic('play');
+                }).catch(() => {});
+                return;
+            }
+
+            if (currentAudioElement) {
+                currentAudioElement.pause();
+                currentAudioElement.currentTime = 0;
+            }
+
+            if (preloadedAudioCache[songKey]) {
+                currentAudioElement = preloadedAudioCache[songKey];
+            } else {
+                currentAudioElement = new Audio(audioUrl);
+                currentAudioElement.preload = "auto";
+                preloadedAudioCache[songKey] = currentAudioElement;
+            }
+
+            currentPlayingKey = songKey;
+
+            if (!currentAudioElement.hasListeners) {
+                currentAudioElement.addEventListener('timeupdate', () => {
+                    if (!currentAudioElement) return;
+                    const current = currentAudioElement.currentTime;
+                    const duration = currentAudioElement.duration;
+                    timeCounter.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+                    if (duration > 0) updateWaveformProgress((current / duration) * 100);
+                });
+
+                currentAudioElement.addEventListener('ended', () => {
+                    isPlaying = false;
+                    setWaveformPlaying(false);
+                    updateWaveformProgress(0);
+                    timeCounter.textContent = "0:00 / 0:00";
+                    updateActionButtonText();
+                    setStatus("Hazır", 'idle');
+                    releaseWakeLock();
+
+                    const nextIndex = (index + 1) % currentData.length;
+                    targetOffset = nextIndex;
+                });
+                currentAudioElement.hasListeners = true;
+            }
+
+            currentAudioElement.play().then(() => {
+                isPlaying = true;
+                setWaveformPlaying(true);
+                updateActionButtonText();
+                setStatus("Çalınıyor", 'playing');
+                requestWakeLock();
+                triggerHaptic('play');
+            }).catch(() => {
+                isPlaying = false;
+                setWaveformPlaying(false);
+                updateActionButtonText();
+                setStatus("Duraklatıldı", 'paused');
+            });
+        }
+
+        function togglePlayState() {
+            const activeIndex = Math.round(scrollOffset);
+            if (isPlaying) {
+                if (currentAudioElement) currentAudioElement.pause();
+                isPlaying = false;
+                setWaveformPlaying(false);
+                updateActionButtonText();
+                setStatus("Duraklatıldı", 'paused');
+                releaseWakeLock();
+                triggerHaptic('click');
+            } else {
+                playSongAtIndex(activeIndex);
+            }
+        }
+
+        const wheelContainer = document.getElementById('wheelContainer');
+        const pickerList = document.getElementById('pickerList');
+        const selectedTitle = document.getElementById('selectedTitle');
+        const headerSubtitle = document.getElementById('headerSubtitle');
+        const actionBtn = document.getElementById('actionBtn');
+        const backBtn = document.getElementById('backBtn');
+        const timeCounter = document.getElementById('timeCounter');
+        const playerControlsContainer = document.getElementById('playerControlsContainer');
+        const artistAvatarContainer = document.getElementById('artistAvatarContainer');
+        const artistAvatarImg = document.getElementById('artistAvatarImg');
+        const avatarPlaceholder = document.getElementById('avatarPlaceholder');
+
+        let lastAvatarName = "";
+        function updateArtistAvatar(name) {
+            if (lastAvatarName === name) return;
+            lastAvatarName = name;
+            artistAvatarContainer.classList.add('fade-out');
+            setTimeout(() => {
+                const imageUrl = artistImages[name];
+                if (imageUrl) {
+                    artistAvatarImg.src = imageUrl;
+                    artistAvatarImg.style.display = "block";
+                    avatarPlaceholder.style.display = "none";
+                } else {
+                    artistAvatarImg.src = "";
+                    artistAvatarImg.style.display = "none";
+                    avatarPlaceholder.style.display = "block";
+                }
+                artistAvatarContainer.classList.remove('fade-out');
+            }, 120);
+        }
+
+        function loadList(dataArray, startIndex = 0) {
+            currentData = dataArray;
+            scrollOffset = startIndex;
+            targetOffset = startIndex;
+            velocity = 0;
+            lastActiveIndex = -1;
+
+            pickerList.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+            currentData.forEach((item) => {
+                const el = document.createElement('div');
+                el.className = 'picker-wheel-item';
+                el.innerHTML = `<span style="color: #ffffff;">${item}</span>`;
+                fragment.appendChild(el);
+            });
+            pickerList.appendChild(fragment);
+            cachedItems = [];
+            cachedSpans = [];
+
+            if (currentMode === 'songs') {
+                currentData.forEach(songName => {
+                    const sKey = `${selectedArtistName}_${songName}`;
+                    if (songAudioMap[sKey]) preloadSong(sKey, songAudioMap[sKey]);
+                });
+            }
+        }
+
+        let cachedItems = [];
+        let cachedSpans = [];
+
+        function updatePositions() {
+            if (!isDragging) {
+                targetOffset += velocity;
+                velocity *= 0.82; 
+                if (Math.abs(velocity) < 0.0008) {
+                    const nearest = Math.round(targetOffset);
+                    targetOffset += (nearest - targetOffset) * 0.15;
+                    if (isUserScrolling && Math.abs(nearest - targetOffset) < 0.001) {
+                        isUserScrolling = false;
+                        setStatus(currentMode === 'artists' ? "Sanatçı seçildi" : "Şarkı seçildi", 'idle');
+                    }
+                }
+            }
+
+            const len = currentData.length;
+            if (targetOffset < 0) { targetOffset *= 0.8; velocity = 0; }
+            else if (targetOffset > len - 1) { targetOffset = (len - 1) + (targetOffset - (len - 1)) * 0.8; velocity = 0; }
+
+            scrollOffset += (targetOffset - scrollOffset) * 0.18;
+
+            const activeIndex = Math.round(scrollOffset);
+            if (activeIndex >= 0 && activeIndex < len && activeIndex !== lastActiveIndex) {
+                lastActiveIndex = activeIndex;
+                selectedTitle.textContent = currentData[activeIndex];
+                triggerHaptic('selection');
+
+                if (currentMode === 'artists') {
+                    selectedArtistIndex = activeIndex;
+                    updateArtistAvatar(currentData[activeIndex]);
+                } else {
+                    if (isPlaying) {
+                        if (currentAudioElement) currentAudioElement.pause();
+                        isPlaying = false;
+                        setWaveformPlaying(false);
+                        updateActionButtonText();
+                        setStatus("Duraklatıldı", 'paused');
+                        releaseWakeLock();
+                    }
+
+                    const songKey = `${selectedArtistName}_${currentData[activeIndex]}`;
+                    if (currentPlayingKey !== songKey) {
+                        if (currentAudioElement) { currentAudioElement.pause(); currentAudioElement = null; }
+                        currentPlayingKey = "";
+                        timeCounter.textContent = "0:00 / 0:00";
+                        updateWaveformProgress(0);
+                    }
+                }
+            }
+
+            if (cachedItems.length !== len) {
+                cachedItems = Array.from(pickerList.children);
+                cachedSpans = cachedItems.map(el => el.querySelector('span'));
+            }
+
+            const itemHeight = 45;
+            for (let i = 0; i < len; i++) {
+                const distance = i - scrollOffset;
+                const absDist = Math.abs(distance);
+                const yPos = distance * itemHeight;
+                const rotateX = distance * -20;
+                const scale = Math.max(0.6, 1 - absDist * 0.18);
+                const opacity = Math.max(0.1, 1 - absDist * 0.5);
+
+                const item = cachedItems[i];
+                if (item) {
+                    item.style.transform = `translate3d(0, ${yPos}px, 0) rotateX(${rotateX}deg) scale(${scale})`;
+                    item.style.opacity = opacity;
+                    item.style.zIndex = Math.round(100 - absDist * 10);
+
+                    const span = cachedSpans[i];
+                    if (span) {
+                        if (absDist < 0.25) {
+                            span.style.color = '#ffffff';
+                            span.style.fontWeight = '700';
+                        } else {
+                            span.style.color = '#71717a';
+                            span.style.fontWeight = '400';
+                        }
+                    }
+                }
+            }
+            requestAnimationFrame(updatePositions);
+        }
+
+        function handleActionButtonAction(e) {
+            if (e) { e.stopPropagation(); e.preventDefault(); }
+            triggerHaptic('click');
+            
+            if (currentMode === 'artists') {
+                selectedArtistIndex = Math.round(scrollOffset);
+                selectedArtistName = selectedTitle.textContent;
+                currentMode = 'songs';
+                headerSubtitle.style.opacity = 0;
+                selectedTitle.style.opacity = 0;
+                setTimeout(() => {
+                    headerSubtitle.textContent = "Seçilen Şarkı";
+                    headerSubtitle.style.opacity = 1;
+                    selectedTitle.style.opacity = 1;
+                }, 120);
+
+                updateActionButtonText();
+                backBtn.style.display = "flex";
+                playerControlsContainer.style.display = "flex";
+                timeCounter.textContent = "0:00 / 0:00";
+                initWaveform();
+
+                loadList(artistData[selectedArtistName] || ["Şarkı bulunamadı"], 0);
+                setStatus("Şarkı seçildi", 'idle');
+            } else {
+                togglePlayState();
+            }
+        }
+
+        function goBackToArtists(e) {
+            if (e) { e.stopPropagation(); e.preventDefault(); }
+            triggerHaptic('back');
+
+            if (currentAudioElement) { currentAudioElement.pause(); currentAudioElement = null; }
+            currentPlayingKey = "";
+            isPlaying = false;
+            setWaveformPlaying(false);
+            updateActionButtonText();
+            releaseWakeLock();
+
+            currentMode = 'artists';
+            headerSubtitle.style.opacity = 0;
+            selectedTitle.style.opacity = 0;
+            setTimeout(() => {
+                headerSubtitle.textContent = "Seçilen Sanatçı";
+                headerSubtitle.style.opacity = 1;
+                selectedTitle.style.opacity = 1;
+            }, 120);
+
+            backBtn.style.display = "none";
+            playerControlsContainer.style.display = "none";
+            updateActionButtonText();
+
+            const artistsArray = Object.keys(artistData);
+            loadList(artistsArray, selectedArtistIndex);
+            updateArtistAvatar(artistsArray[selectedArtistIndex]);
+            setStatus("Sanatçı seçildi", 'idle');
+        }
+
+        function setupListeners() {
+            let lastActionClickTime = 0;
+            const safeButtonHandler = (handlerFn) => {
+                return (e) => {
+                    const now = Date.now();
+                    if (now - lastActionClickTime < 300) return;
+                    lastActionClickTime = now;
+                    handlerFn(e);
+                };
+            };
+
+            actionBtn.addEventListener('touchend', safeButtonHandler(handleActionButtonAction), { passive: false });
+            actionBtn.addEventListener('click', safeButtonHandler(handleActionButtonAction));
+
+            backBtn.addEventListener('touchend', safeButtonHandler(goBackToArtists), { passive: false });
+            backBtn.addEventListener('click', safeButtonHandler(goBackToArtists));
+
+            const onStart = (e, y) => {
+                if (e.target.closest('#actionBtn') || e.target.closest('#backBtn')) return;
+                isDragging = true; 
+                isUserScrolling = true;
+                lastY = y; 
+                velocity = 0;
+                setStatus(currentMode === 'artists' ? "Sanatçı seçiliyor..." : "Şarkı seçiliyor...", 'searching');
+            };
+
+            const onMove = (y) => {
+                if (!isDragging) return;
+                const delta = y - lastY;
+                lastY = y;
+                targetOffset -= delta / 75;
+                velocity = -delta / 75;
+                if (Math.abs(delta) > 5) triggerHaptic('tick');          
+            };
+
+            const onEnd = () => { isDragging = false; };
+
+            wheelContainer.addEventListener('mousedown', (e) => onStart(e, e.clientY));
+            window.addEventListener('mousemove', (e) => onMove(e.clientY));
+            window.addEventListener('mouseup', onEnd);
+
+            wheelContainer.addEventListener('touchstart', (e) => { if(e.touches.length) onStart(e, e.touches[0].clientY); }, { passive: true });
+            window.addEventListener('touchmove', (e) => { if(e.touches.length) onMove(e.touches[0].clientY); }, { passive: true });
+            window.addEventListener('touchend', onEnd);
+
+            wheelContainer.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                isUserScrolling = true;
+                setStatus("Seçiliyor...", 'searching');
+                targetOffset = Math.max(0, Math.min(currentData.length - 1, targetOffset + e.deltaY * 0.0018));
+                triggerHaptic('tick');
+                
+                if (currentMode === 'songs' && isPlaying) {
+                    if (currentAudioElement) currentAudioElement.pause();
+                    isPlaying = false;
+                    setWaveformPlaying(false);
+                    updateActionButtonText();
+                    timeCounter.textContent = "0:00 / 0:00";
+                    updateWaveformProgress(0);
+                    setStatus("Duraklatıldı", 'paused');
+                    releaseWakeLock();
+                }
+
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(() => {
+                    isUserScrolling = false;
+                    setStatus("Hazır", 'idle');
+                }, 100);
+            }, { passive: false });
+
+            const waveformArea = document.getElementById('waveformArea');
+            let isSeeking = false;
+
+            const handleSeekStart = (clientX) => {
+                isSeeking = true;
+                seekSong(clientX);
+                triggerHaptic('tick');
+            };
+
+            const handleSeekMove = (clientX) => {
+                if (!isSeeking) return;
+                seekSong(clientX);
+            };
+
+            const handleSeekEnd = () => { isSeeking = false; };
+
+            waveformArea.addEventListener('mousedown', (e) => handleSeekStart(e.clientX));
+            window.addEventListener('mousemove', (e) => { if (isSeeking) handleSeekMove(e.clientX); });
+            window.addEventListener('mouseup', handleSeekEnd);
+
+            waveformArea.addEventListener('touchstart', (e) => {
+                if (e.touches.length) handleSeekStart(e.touches[0].clientX);
+            }, { passive: true });
+            window.addEventListener('touchmove', (e) => {
+                if (isSeeking && e.touches.length) handleSeekMove(e.touches[0].clientX);
+            }, { passive: true });
+            window.addEventListener('touchend', handleSeekEnd);
+        }
+
+        window.onload = () => {
+            loadList(Object.keys(artistData), 0);
+            updateActionButtonText();
+            requestAnimationFrame(updatePositions);
+            setupListeners();
+            setStatus("Hazır", 'idle');
+        };
+    </script>
+</body>
+</html>
+ 
